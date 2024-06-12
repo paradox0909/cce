@@ -1,6 +1,6 @@
 #!/bin/sh
 #apt-get update
-	echo "apt-get has updated."
+	#echo "apt-get has updated."
 #apt-get install libpam-pwquality -y
 #echo "libpam-pwquality 패키지가 설치되었습니다. 작업을 진행합니다."
 #1-1-1 telnet check
@@ -9,6 +9,7 @@ if [ -n "$check_telnet" ]; then
     echo "telnet이 설치되어 있습니다. 원격 접속이 취약할 수 있습니다."
 
     if [ -f /etc/securetty ]; then
+        echo "securetty file이 존재합니다. 패치를 시작합니다."
         sed -i '/^pts\/[0-9]\+$/s/^/#/' /etc/securetty
         echo "/etc/securetty 파일에서 pts/x 설정을 주석 처리했습니다."
     else
@@ -16,6 +17,7 @@ if [ -n "$check_telnet" ]; then
     fi
 
     if [ -f /etc/pam.d/login ]; then
+        echo "/etc/pam.d/login 항목을 발견했습니다. 패치를 시작합니다."
         if grep -q "^#auth required /lib/security/pam_securetty.so" /etc/pam.d/login; then
             sed -i 's|^#auth required /lib/security/pam_securetty.so|auth required /lib/security/pam_securetty.so|' /etc/pam.d/login
             echo "/etc/pam.d/login 파일에서 pam_securetty.so 설정을 활성화했습니다."
@@ -33,6 +35,7 @@ else
 
     # pam_securetty.so 설정 확인
     if [ -f /etc/pam.d/login ]; then
+        echo "pam_securetty.so 파일을 찾았습니다."
         check_pam=$(grep "pam_securetty.so" /etc/pam.d/login | grep -v "#")
         if [ -n "$check_pam" ]; then
             echo "pam_securetty.so 설정 양호"
@@ -46,6 +49,7 @@ fi
 
 #1-1-2 ssh check
 if [ -f /etc/ssh/sshd_config ]; then
+        echo "etc/ssh/sshd_config 파일을 발견하였습니다. 수정을 시작합니다."
     if grep -q "^#PermitRootLogin" /etc/ssh/sshd_config; then
         sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
         echo "PermitRootLogin 설정을 no로 변경했습니다."
