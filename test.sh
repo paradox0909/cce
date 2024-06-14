@@ -1,44 +1,44 @@
-inetd_conf_file="/etc/inetd.conf"
-xinetd_d_directory="/etc/xinetd.d/"
+#!/bin/bash
 
-inetd_conf_file_owner=$(stat -c %U "$inetd_conf_file")
-inetd_conf_file_permissions=$(stat -c %a "$inetd_conf_file")
+# /etc/syslog.conf file owner authority setting
+etc_syslog_conf_path="/etc/syslog.conf"
 
-inetd_required_owner="root"
-inetd_required_permissions="600"
-
-if [ "$inetd_conf_file_owner" = "$inetd_required_owner" ] && [ "$inetd_conf_file_permissions" -eq "$inetd_required_permissions" ]; then
-	echo "양호 : /etc/inetd.conf 파일의 소유자가 root이고, 권한이 600입니다."
+if [ ! -f "$etc_syslog_conf_path" ]; then
+    echo "$etc_syslog_conf_path 파일이 존재하지 않습니다."
 else
-	echo "취약 : 현재 소유자 : $inetd_conf_file_owner 현재 권한 : $inetd_conf_file_permissions"
-    echo "$inetd_conf_file_owner,$inetd_conf_file_permissions 수동 점검 요망"
+    syslog_conf_file_owner=$(stat -c %U "$etc_syslog_conf_path")
+    syslog_conf_file_permissions=$(stat -c %a "$etc_syslog_conf_path")
+    syslog_acceptable_owners=("root" "bin" "sys")
+    required_syslog_permissions=640
 
-if [ "$1" = "-fix" ]; then
-    echo "-fix 인자값에 따라 xinetd.conf 파일과 xinetd.d 디렉터리 내의 파일의 소유자와 권한을 확인합니다."
-    echo "/etc/xinetd.conf 파일 : "
-    ls -l /etc/xinetd.conf
-    echo "/etc/xinetd.d 디렉터리 : "
-    ls -al /etc/xinetd.d
+    is_owner_acceptable() {
+        local input_owner=$1
+        for acceptable_owner in "${syslog_acceptable_owners[@]}"; do
+            if [ "$input_owner" = "$acceptable_owner" ]; then
+                return 0
+            fi
+        done
+        return 1
+    }
 
-    if [ "$(stat -c '%U' /etc/xinetd.conf)" != "root" ] || [ "$(stat -c '%a' /etc/xinetd.conf)" != "600" ]; then
-        echo "\"xinetd.conf\" 파일 소유자가 root가 아니거나 파일의 권한이 600이 아닙니다."
-        echo "소유자를 root로, 권한을 600으로 변경합니다."
-        chown root /etc/xinetd.conf
-        chmod 600 /etc/xinetd.conf
-
-        echo "설정 변경이 완료되었습니다."
+    if is_owner_acceptable "$syslog_conf_file_owner" && [ "$syslog_conf_file_permissions" -le "$required_syslog_permissions" ]; then
+        echo "양호 : /etc/syslog.conf 파일의 소유자가 root(또는 bin, sys)이고, 권한이 640 이하입니다."
     else
-        echo "xinetd.conf 파일이 양호합니다."
+        echo "취약 : 현재 소유자 : $syslog_conf_file_owner, 현재 권한 : $syslog_conf_file_permissions"
+        echo "/etc/syslog.conf 파일 소유자 및 권한 설정 수동 진단 필요 요망."
     fi
 
-    xinetd_insecure_files=$(find /etc/xinetd.d/ -type f \( ! -user root -o ! -perm -600 \))
-    if [ -n "$xinetd_insecure_files" ]; then
-        echo "xinetd.d 디렉터리 내의 일부 파일이 취약합니다."
-        echo "소유자를 root로, 권한을 600으로 변경합니다."
-        chown root /etc/xinetd.d/*
-        chmod 600 /etc/xinetd.d/*
-        echo "설정 변경이 완료되었습니다."
-    else
-        echo "xinetd.d 디렉터리 내의 모든 파일이 양호합니다."
+    if [ "$1" = "-fix" ]; then
+        echo "-fix 인자값에 따라 조치를 시작합니다."
+        ls -l /etc/syslog.conf
+        if ! is_owner_acceptable "$syslog_conf_file_owner" || [ "$syslog_conf_file_permissions" -gt "$required_syslog_permissions" ]; then
+            echo "\"syslog.conf\" 파일 소유자가 root, bin, sys가 아니거나 파일의 권한이 640이 아닙니다."
+            echo "소유자를 root로, 권한을 640으로 변경합니다."
+            chown root /etc/syslog.conf
+            chmod 640 /etc/syslog.conf
+            echo "/etc/syslog.conf 파일 소유자 및 권한을 설정했습니다."
+        else
+            echo "소유자가 root(또는 bin, sys)이고, 파일의 권한이 640 이하입니다. 변경사항이 없습니다."
+        fi
     fi
 fi
