@@ -326,8 +326,173 @@ if [ "$1" = "-fix" ]; then
 
 fi
 
-#
+#2-9 SUID, SGID, Setiing file check
+SUID_SGID_SEARCH_DIR="/"
 
+suid_sgid_files=$(find $SUID_SGID_SEARCH_DIR -perm /6000 -type f 2>/dev/null)
+
+CRITICAL_EXECUTABLES=(
+    "/bin/su"
+    "/usr/bin/passwd"
+    "/usr/bin/chsh"
+    "/usr/bin/gpasswd"
+    "/usr/bin/sudo"
+    "/sbin/mount"
+    "/sbin/umount"
+
+)
+
+TARGET_GROUP="trustedgroup"
+
+check_critical_executables() {
+    for critical_executable in "${CRITICAL_EXECUTABLES[@]}"; do
+        if [ -f "$critical_executable" ]; then
+            if [ -u "$critical_executable" ] || [ -g "$critical_executable" ]; then
+                echo "취약: 주요 실행파일 $critical_executable 에 SUID/SGID 설정이 있습니다."
+            else
+                echo "양호: 주요 실행파일 $critical_executable 에 SUID/SGID 설정이 없습니다."
+            fi
+        else
+            echo "주의: 주요 실행파일 $critical_executable 를 찾을 수 없습니다."
+        fi
+    done
+}
+
+fix_suid_sgid() {
+    echo "SUID 및 SGID 비트를 제거하거나 특정 그룹으로 제한하는 중..."
+    for suid_sgid_file in $suid_sgid_files; do
+        echo "수정 중: $suid_sgid_file"
+        /usr/bin/chgrp $TARGET_GROUP "$suid_sgid_file"
+        /usr/bin/chmod 4750 "$suid_sgid_file"
+    done
+}
+
+echo "SUID 및 SGID 설정된 파일 목록:"
+echo "$suid_sgid_files"
+echo
+
+check_critical_executables
+
+if [ "$1" = "-fix" ]; then
+    echo "-fix 인자값에 따라 수정이 진행됩니다."
+    fix_suid_sgid
+fi
+
+#2-10 User, System Startup file & Environment file owner and authority Settings
+
+#2-11 world writealble file check
+world_writable_critical_files=(
+    "/etc/passwd"
+    "/etc/shadow"
+    "/etc/sudoers"
+    "/etc/crontab"
+    "/etc/ssh/sshd_config"
+    "/etc/hosts"
+    "/etc/resolv.conf"
+)
+
+check_world_writable() {
+    for world_writable_file in "${world_writable_critical_files[@]}"; do
+        if [ -w "$world_writable_file" ]; then
+            echo "취약: $world_writable_file 파일이 world writable로 설정되어 있습니다."
+        else
+            echo "양호: $world_writable_file 파일이 world writable로 설정되어 있지 않습니다."
+        fi
+    done
+}
+
+fix_world_writable() {
+    for world_writable_file in "${world_writable_critical_files[@]}"; do
+        if [ -w "$world_writable_file" ]; then
+            chmod o-w "$world_writable_file"
+            echo "수정: $world_writable_file 파일의 world writable 권한이 제거되었습니다."
+        fi
+    done
+}
+
+if [ "$1" = "-fix" ]; then
+    ehco "-fix 인자값에 따라 수정이 진행됩니다."
+    fix_world_writable
+else
+    check_world_writable
+fi
+
+#2-12 Check device files that do not exist in /dev
+check_nonexistent_devices() {
+    echo "양호: /dev에 대한 파일 점검 수행 중..."
+    for dev_not_exist_file in $(find /dev -type f); do
+        if ! [[ -c "$dev_not_exist_file" ]]; then
+            echo "취약: $dev_not_exist_file 파일은 /dev에 존재하지 않는 device 파일입니다."
+        fi
+    done
+}
+
+fix_nonexistent_devices() {
+    echo "수정: /dev에 존재하지 않는 device 파일 제거 완료"
+    for dev_not_exist_file in $(find /dev -type f); do
+        if ! [[ -c "$dev_not_exist_file" ]]; then
+            echo "제거: $dev_not_exist_file 파일 삭제"
+            rm -f "$dev_not_exist_file"
+        fi
+    done
+}
+
+if [ "$1" = "-fix" ]; then
+    echo "-fix 인자값에 따라 설정이 진행됩니다."
+    fix_nonexistent_devices
+else
+    check_nonexistent_devices
+fi
+
+#2-13 Do not use $HOME/.rhosts, hosts.equiv
+ check_rhosts_hosts_equiv() {
+    echo "양호: /etc/hosts.equiv, do_not_use_home/.rhosts 파일 점검 수행 중..."
+
+    if [ -f /etc/hosts.equiv ]; then
+        if [ "$(stat -c '%U' /etc/hosts.equiv)" == "root" ] && [ "$(stat -c '%a' /etc/hosts.equiv)" -le 600 ] && ! grep -q "+" /etc/hosts.equiv; then
+            echo "양호: /etc/hosts.equiv 파일이 안전하게 설정되어 있습니다."
+        else
+            echo "취약: /etc/hosts.equiv 파일이 안전하지 않게 설정되어 있습니다."
+        fi
+    else
+        echo "양호: /etc/hosts.equiv 파일이 존재하지 않습니다."
+    fi
+
+    if [ -f "$do_not_use_home/.rhosts" ]; then
+        if [ "$(stat -c '%U' "$do_not_use_home/.rhosts")" == "$(whoami)" ] && [ "$(stat -c '%a' "$do_not_use_home/.rhosts")" -le 600 ] && ! grep -q "+" "$do_not_use_home/.rhosts"; then
+            echo "양호: do_not_use_home/.rhosts 파일이 안전하게 설정되어 있습니다."
+        else
+            echo "취약: do_not_use_home/.rhosts 파일이 안전하지 않게 설정되어 있습니다."
+        fi
+    else
+        echo "양호: do_not_use_home/.rhosts 파일이 존재하지 않습니다."
+    fi
+}
+
+fix_rhosts_hosts_equiv() {
+    echo "수정: /etc/hosts.equiv, do_not_use_home/.rhosts 파일 설정 수정합니다."
+
+    if [ -f /etc/hosts.equiv ]; then
+        chown root /etc/hosts.equiv
+        chmod 600 /etc/hosts.equiv
+        sed -i 's/+//g' /etc/hosts.equiv
+        echo "수정: /etc/hosts.equiv 파일이 안전하게 설정되었습니다."
+    fi
+
+    if [ -f "$do_not_use_home/.rhosts" ]; then
+        chown "$(whoami)" "$do_not_use_home/.rhosts"
+        chmod 600 "$do_not_use_home/.rhosts"
+        sed -i 's/+//g' "$do_not_use_home/.rhosts"
+        echo "수정: do_not_use_home/.rhosts 파일이 안전하게 설정되었습니다."
+    fi
+}
+
+if [ "$1" = "-fix" ]; then
+    echo "-fix 인자값에 따라 설정이 진행됩니다. "
+    fix_rhosts_hosts_equiv
+else
+    check_rhosts_hosts_equiv
+fi
 
 
 
