@@ -513,4 +513,15 @@ else
 fi
 
 if [ "$1" = "-fix" ]; then
-    
+    if [ -f "$INETD_CONF" ]; then
+        sed -i '/^[^#]*finger/s/^/# /' "$INETD_CONF"
+        echo "-fix 인자에 따라 $INETD_CONF 파일을 수정했습니다."
+        grep -i 'finger' "$INETD_CONF"
+    else
+        echo "$INETD_CONF 파일이 존재하지 않습니다."
+    fi
+else
+    echo "inetd 서비스를 재시작할 수 없습니다. 수동 진단 요망"
+fi
+
+# 3.2 Anonymous FTP 비활성화
