@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # apt update
 # echo "apt 저장소를 업데이트 하였습니다."
@@ -111,7 +111,7 @@ if [ -f /etc/passwd ]; then
     if [ "$etc_passwd_pass" = "x" ]; then
         echo "정상 : $etc_passwd_user"
     else
-        echo "수동 진단 요밍: $etc_passwd_user"
+        echo "수동 진단 요망: $etc_passwd_user"
     fi
     done < /etc/passwd
 
@@ -291,7 +291,7 @@ if [ ! -f "$etc_syslog_conf_path" ]; then
 else
     syslog_conf_file_owner=$(stat -c %U "$etc_syslog_conf_path")
     syslog_conf_file_permissions=$(stat -c %a "$etc_syslog_conf_path")
-    syslog_acceptable_owners=("root" "bin" "sys")
+    syslog_acceptable_owners=$("root" "bin" "sys")
     required_syslog_permissions=640
 
     is_owner_acceptable() {
@@ -310,6 +310,7 @@ else
         echo "/etc/syslog.conf 파일 소유자 및 권한 설정 수동 진단 필요 요망 . "
     fi
 
+fi
 
 if [ "$1" = "-fix" ]; then
     echo "-fix 인자값에 따라 조치를 시작합니다. "
@@ -331,16 +332,8 @@ SUID_SGID_SEARCH_DIR="/"
 
 suid_sgid_files=$(find $SUID_SGID_SEARCH_DIR -perm /6000 -type f 2>/dev/null)
 
-CRITICAL_EXECUTABLES=(
-    "/bin/su"
-    "/usr/bin/passwd"
-    "/usr/bin/chsh"
-    "/usr/bin/gpasswd"
-    "/usr/bin/sudo"
-    "/sbin/mount"
-    "/sbin/umount"
+CRITICAL_EXECUTABLES=("/bin/su" "/usr/bin/passwd" "/usr/bin/chsh" "/usr/bin/gpasswd" "/usr/bin/sudo" "/sbin/mount" "/sbin/umount")
 
-)
 
 TARGET_GROUP="trustedgroup"
 
@@ -494,6 +487,30 @@ else
     check_rhosts_hosts_equiv
 fi
 
+#2-14 Connect Ip and Port
 
+HOST_DENY="/etc/host.deny"
+HOSTS_ALLOW="/etc/hosts.allow"
 
+if [[ -e $HOST_DENY  || -e $HOSTS_ALLOW ]]; then
+    echo "양호"
+else
+    echo "수동 진단 필요"
+fi
 
+# 3.1 Finger Service disable 
+FINGER_INETD_CONF="/etc/inetd.conf"
+
+if [ -e "$FINGER_INETD_CONF" ]; then
+    FINGER_SERVICE=$(grep -i 'finger' $FINGER_INETD_CONF)
+    if [ -z "$FINGER_SERVICE" ] || echo "$FINGER_SERVICE" | grep -q '^#'; then
+        ehco "양호 : Finger Service Disabled"
+    else
+        echo "취약 : Finger Service Enabled"
+    fi
+else
+    echo "$FINGER_INETD_CONF 파일이 존재하지 않습니다. "
+fi
+
+if [ "$1" = "-fix" ]; then
+    
