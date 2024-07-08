@@ -669,7 +669,7 @@ if [ -z "$nfs_processes" ]; then
     exit 0
 else
     echo "취약"
-
+x
     echo "NFS 데몬을 종료합니다."
     sudo systemctl stop nfs-server.service
     sudo systemctl stop nfs-config.service
@@ -678,7 +678,7 @@ else
     echo "NFS 데몬을 설정합니다."
     sudo systemctl disable nfs-server.service
     sudo systemctl disable nfs-config.service
-    sudo systemctl disable rpcbind.service
+    sudo systemctl disable rpcbind.service                                                                                  ㅋ
 
     sudo update-rc.d nfs-kernel-server disable
     sudo update-rc.d nfs-common disable
@@ -688,4 +688,59 @@ echo "NFS 파일을 제거합니다."
 sudo rm /etc/exports
 
 echo "NFS 서비스 비활성화 완료"
+
+#u-25 3.7 NFS access control
+if [ ! -f /etc/exports ]; then
+    echo "/etc/exports 파일이 존재하지 않습니다. NFS 서비스가 설정되지 않았을 수 있습니다."
+    exit 1
+fi
+
+if grep -q '^\s*/.* *(rw|ro|)' /etc/exports; then
+    echo "취약: /etc/exports 파일에 everyone 공유가 설정되어 있습니다."
+else
+    echo "양호: /etc/exports 파일에 everyone 공유가 설정되어 있지 않습니다."
+fi
+
+if systemctl is-active --quiet nfs-server; then
+    echo "NFS 서비스가 실행 중입니다."
+    
+    echo "현재 /etc/exports 파일의 내용을 점검합니다:"
+    cat /etc/exports
+
+    echo "추가할 디렉토리와 호스트명을 입력하십시오 (예: /stand host1 host2 또는 /stand 192.168.1.1):"
+    read new_export
+
+    echo "$new_export" >> /etc/exports
+
+    echo "/etc/exports 파일에 새로운 설정이 추가되었습니다:"
+    cat /etc/exports
+
+    echo "NFS 서비스를 다시 시작합니다."
+    systemctl restart nfs-server
+
+    echo "NFS 서비스가 재시작되었습니다."
+else
+    echo "NFS 서비스가 실행 중이지 않습니다. 불필요한 NFS 서비스를 사용하지 않으므로 양호합니다."
+fi
+
+#u-26 3.8 delete automountd
+automount_SERVICE_STATUS=$(ps aux | grep automountd | grep -v grep)
+
+if [ -z "$automount_SERVICE_STATUS" ]; then
+    echo "양호"
+else
+    echo "취약"
+
+
+    if [ "$1" = "-fix" ]; then
+        echo "-fix 인자에 따라 수정이 진행됩니다."
+        automount_PID=$(echo "$automount_SERVICE_STATUS" | awk '{print $2}')
+        kill -9 $automount_PID
+
+        automount_INIT_SCRIPTS=$(ls -al /etc/rc.d/rc*.d/* | grep automountd)
+        for automount_SCRIPT in $automount_INIT_SCRIPTS; do
+            mv $automount_SCRIPT $(dirname $automount_SCRIPT)/_$(basename $automount_SCRIPT)
+        done
+    fi
+fi
 
