@@ -525,3 +525,140 @@ else
 fi
 
 # 3.2 Anonymous FTP 비활성화
+cp /etc/passwd /etc/passwd.backup
+
+ftp_accounts=("ftp" "anonymous")
+if grep -qE "^(ftp|anonymous):" /etc/passwd; then
+    echo "취약"
+else
+    echo "양호"
+fi
+
+if [ "$1" = "-fix" ]; then
+    echo "-fix 인자에 따라 수정이 시작됩니다." 
+    for account in "${ftp_accounts[@]}"; do
+        sed -i "/^${account}:/d" /etc/passwd
+    done
+    echo "ftp 및 anonymous 계정이 /etc/passwd 파일에서 삭제되었습니다."
+fi
+
+#3.3 r 계열 서비스 비활성화
+r_service_dir="/etc/xinetd.d"
+r_main_services=("rlogin" "rsh" "rexec")
+
+for r_service in "${r_main_services[@]}"; do
+    r_service_file="$r_service_dir/$r_service"
+    if [[ -f $r_service_file ]]; then
+        if grep -q "^disable" "$r_service_file"; then
+            sed -i 's/^disable.*/disable = yes/' "$r_service_file"
+        else
+            echo "disable = yes" >> "$r_service_file"
+        fi
+        echo "$r_service service has been disabled."
+    else
+        echo "$r_service service file not found."
+    fi
+done
+
+#3.4 crond file owner and permissions
+crond_check_permissions() {
+    crontab_command_path=$(which crontab)
+    crontab_command_permissions=$(stat -c "%a" $crontab_command_path)
+    cron_related_files=(
+        "/etc/cron.d/*"
+        "/etc/cron.hourly/*"
+        "/etc/cron.daily/*"
+        "/etc/cron.weekly/*"
+        "/etc/cron.monthly/*"
+        "/var/spool/cron/*"
+        "/var/spool/cron/crontabs/*"
+        "/etc/cron.d/cron.allow"
+        "/etc/cron.d/cron.deny"
+    )
+
+    if [[ $crontab_command_permissions -le 750 ]]; then
+        for cron_file in "${cron_related_files[@]}"; do
+            if [ -e $cron_file ]; then
+                cron_file_permissions=$(stat -c "%a" $cron_file)
+                if [[ $cron_file_permissions -gt 640 ]]; then
+                    echo "취약"
+                    return
+                fi
+            fi
+        done
+        echo "양호"
+    else
+        echo "취약"
+    fi
+}
+crond_fix_permissions() {
+    crontab_command_path=$(which crontab)
+    chmod 750 $crontab_command_path
+
+    cron_related_files=(
+        "/etc/cron.d/*"
+        "/etc/cron.hourly/*"
+        "/etc/cron.daily/*"
+        "/etc/cron.weekly/*"
+        "/etc/cron.monthly/*"
+        "/var/spool/cron/*"
+        "/var/spool/cron/crontabs/*"
+        "/etc/cron.d/cron.allow"
+        "/etc/cron.d/cron.deny"
+    )
+
+    for cron_file in "${cron_related_files[@]}"; do
+        if [ -e $cron_file ]; then
+            chown root $cron_file
+            chmod 640 $cron_file
+        fi
+    done
+}
+
+if [ "$1" = "-fix" ]; then
+    echo "-fix 인자에 따라 수정이 진행됩니다."
+    crond_fix_permissions
+else
+    crond_check_permissions
+fi
+
+#3.5 Dos attack service disabled
+
+dos_xinetd_dir="/etc/xinetd.d/"
+dos_service=("echo" "discard" "daytime" "chargen" "ntp" "snmp")
+
+for dos_service in "$(dos_services[@])"
+do
+    dos_conf_file="$(dos_xinetd_dir)$(dos_service)"
+
+    if [ -f "$dos_conf_file" ]; then
+        echo "$dos_service"
+        sed -i 's/disable[[:space:]]*=[[:space:]]*no/disable = yes/g' "$dos_conf_file"
+    else
+        echo "$dos_service 구성 파일을 찾을 수 없습니다."
+    fi
+done
+
+echo "서비스를 재시작합니다"
+service xinetd restart
+echo "설정 완료"
+
+dos_all_disabled=true
+for dos_service in "${dos_services[@]}"
+do
+    dos_conf_file="${dos_xinetd_dir}${dos_service}"
+    if [ -f $dos_conf_file ]; then
+        dos_disabled_status=$(grep -i "disable[[:space:]]*=[[:space:]]*yes" "$dos_conf_file")
+        if [ -z "$dos_disable_status" ]; then
+            echo "$dos_service disabled"
+            dos_all_disabled=false
+        fi
+    fi
+done
+
+if $dos_all_disabled; then
+    echo "양호 : 사용하지 않는 Dos 공격에 취약한 서비스가 비활성화됨."
+else
+    echo "취약 : 사용하지 않는 Dos 공격에 취약한 서비스가 있습니다."
+
+#u-24 3.6 nfs service disable
