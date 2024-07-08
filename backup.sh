@@ -662,3 +662,30 @@ else
     echo "취약 : 사용하지 않는 Dos 공격에 취약한 서비스가 있습니다."
 
 #u-24 3.6 nfs service disable
+nfs_processes=$(ps -ef | grep -E "nfsd|statd|mountd|lockd" | grep -v grep)
+
+if [ -z "$nfs_processes" ]; then
+    echo "양호"
+    exit 0
+else
+    echo "취약"
+
+    echo "NFS 데몬을 종료합니다."
+    sudo systemctl stop nfs-server.service
+    sudo systemctl stop nfs-config.service
+    sudo systemctl stop rpcbind.service
+
+    echo "NFS 데몬을 설정합니다."
+    sudo systemctl disable nfs-server.service
+    sudo systemctl disable nfs-config.service
+    sudo systemctl disable rpcbind.service
+
+    sudo update-rc.d nfs-kernel-server disable
+    sudo update-rc.d nfs-common disable
+fi
+
+echo "NFS 파일을 제거합니다."
+sudo rm /etc/exports
+
+echo "NFS 서비스 비활성화 완료"
+
