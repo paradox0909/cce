@@ -3,7 +3,7 @@
 # apt update
 # echo "apt 저장소를 업데이트 하였습니다."
 echo "########################################################################"
-echo "#                      Infra Vulnerability Checker                      #"
+echo "#                         CCE Vulnerability Checker                     #"
 echo "#                                               Made By : Paradox       #"
 echo "########################################################################"
 echo "libpam-pwquality 패키지를 설치할까요?"
@@ -1171,5 +1171,3 @@ grep -Ei "\bDocumentRoot\b" "$separation_HTTPD_CONF" | while read -r separation_
         echo
     fi
 done
-
-
