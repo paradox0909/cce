@@ -15,7 +15,7 @@ cd cce
 Step 3. change mode (Permission Assignment)
 <pre>
 <code>
-chmod +x main.sh
+chmod +x backup.sh
 </code>
 </pre>
 Step 4. execute
@@ -35,4 +35,4 @@ Step 4. execute
 </code>
 </pre>
 
-## 주의 : --fix 인자 사용 시, 서버 내 파일의 내용이 임의로 삭제되거나 바뀔 수 있으므로, 백업을 하고 사용할 것.
+#### 주의 : --fix 인자 사용 시, 서버 내 파일의 내용이 임의로 삭제되거나 바뀔 수 있으므로, 백업을 하고 사용할 것.
