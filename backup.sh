@@ -408,7 +408,7 @@ fix_world_writable() {
 }
 
 if [ "$1" = "-fix" ]; then
-    ehco "-fix 인자값에 따라 수정이 진행됩니다."
+    echo "-fix 인자값에 따라 수정이 진행됩니다."
     fix_world_writable
 else
     check_world_writable
@@ -567,7 +567,7 @@ done
 #3.4 crond file owner and permissions
 crond_check_permissions() {
     crontab_command_path=$(which crontab)
-    crontab_command_permissions=$(stat -c "%a" $crontab_command_path)
+    crontab_command_permissions=$(stat -c "%a" "$crontab_command_path")
     cron_related_files=(
         "/etc/cron.d/*"
         "/etc/cron.hourly/*"
@@ -582,22 +582,25 @@ crond_check_permissions() {
 
     if [[ $crontab_command_permissions -le 750 ]]; then
         for cron_file in "${cron_related_files[@]}"; do
-            if [ -e $cron_file ]; then
-                cron_file_permissions=$(stat -c "%a" $cron_file)
-                if [[ $cron_file_permissions -gt 640 ]]; then
-                    echo "취약"
-                    return
+            for file in $cron_file; do
+                if [ -e "$file" ]; then
+                    cron_file_permissions=$(stat -c "%a" "$file")
+                    if [[ $cron_file_permissions -gt 640 ]]; then
+                        echo "취약: $file permissions are $cron_file_permissions"
+                        return
+                    fi
                 fi
-            fi
+            done
         done
         echo "양호"
     else
-        echo "취약"
+        echo "취약: crontab command permissions are $crontab_command_permissions"
     fi
 }
+
 crond_fix_permissions() {
     crontab_command_path=$(which crontab)
-    chmod 750 $crontab_command_path
+    chmod 750 "$crontab_command_path"
 
     cron_related_files=(
         "/etc/cron.d/*"
@@ -612,10 +615,12 @@ crond_fix_permissions() {
     )
 
     for cron_file in "${cron_related_files[@]}"; do
-        if [ -e $cron_file ]; then
-            chown root $cron_file
-            chmod 640 $cron_file
-        fi
+        for file in $cron_file; do
+            if [ -e "$file" ]; then
+                chown root "$file"
+                chmod 640 "$file"
+            fi
+        done
     done
 }
 
@@ -626,14 +631,14 @@ else
     crond_check_permissions
 fi
 
+
 #3.5 Dos attack service disabled
-
 dos_xinetd_dir="/etc/xinetd.d/"
-dos_service=("echo" "discard" "daytime" "chargen" "ntp" "snmp")
+dos_services=("echo" "discard" "daytime" "chargen" "ntp" "snmp")
 
-for dos_service in "$(dos_services[@])"
+for dos_service in "${dos_services[@]}"
 do
-    dos_conf_file="$(dos_xinetd_dir)$(dos_service)"
+    dos_conf_file="${dos_xinetd_dir}${dos_service}"
 
     if [ -f "$dos_conf_file" ]; then
         echo "$dos_service"
@@ -651,9 +656,9 @@ dos_all_disabled=true
 for dos_service in "${dos_services[@]}"
 do
     dos_conf_file="${dos_xinetd_dir}${dos_service}"
-    if [ -f $dos_conf_file ]; then
+    if [ -f "$dos_conf_file" ]; then
         dos_disabled_status=$(grep -i "disable[[:space:]]*=[[:space:]]*yes" "$dos_conf_file")
-        if [ -z "$dos_disable_status" ]; then
+        if [ -z "$dos_disabled_status" ]; then
             echo "$dos_service disabled"
             dos_all_disabled=false
         fi
@@ -664,13 +669,14 @@ if $dos_all_disabled; then
     echo "양호 : 사용하지 않는 Dos 공격에 취약한 서비스가 비활성화됨."
 else
     echo "취약 : 사용하지 않는 Dos 공격에 취약한 서비스가 있습니다."
+fi
+echo "Debug: End of script reached"
 
 #u-24 3.6 nfs service disable
 nfs_processes=$(ps -ef | grep -E "nfsd|statd|mountd|lockd" | grep -v grep)
 
 if [ -z "$nfs_processes" ]; then
     echo "양호"
-    exit 0
 else
     echo "취약"
 x
@@ -696,7 +702,6 @@ echo "NFS 서비스 비활성화 완료"
 #u-25 3.7 NFS access control
 if [ ! -f /etc/exports ]; then
     echo "/etc/exports 파일이 존재하지 않습니다. NFS 서비스가 설정되지 않았을 수 있습니다."
-    exit 1
 fi
 
 if grep -q '^\s*/.* *(rw|ro|)' /etc/exports; then
@@ -995,7 +1000,6 @@ dns_version_DNS_PROCESS=$(ps -ef | grep named | grep -v "grep")
 
 if [ -z "$dns_version_DNS_PROCESS" ]; then
     echo "양호"
-    exit 0
 fi
 dns_version_ALLOW_TRANSFER=$(cat /etc/named.conf 2>/dev/null | grep 'allow-transfer')
 dns_version_XFRNETS=$(cat /etc/named.boot 2>/dev/null | grep 'xfrnets')
@@ -1116,7 +1120,6 @@ check_follow_symlinks() {
         elif [[ $line =~ Options ]]; then
             if [[ $line =~ FollowSymLinks ]]; then
                 echo "양호"
-                exit 0
             fi
         fi
     done)
