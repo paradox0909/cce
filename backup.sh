@@ -1174,3 +1174,5 @@ grep -Ei "\bDocumentRoot\b" "$separation_HTTPD_CONF" | while read -r separation_
         echo
     fi
 done
+echo "모든 프로세스가 종료되었습니다." 
+exit 1
