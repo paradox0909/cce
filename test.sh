@@ -1,32 +1,41 @@
-if [ ! -f /etc/exports ]; then
-    echo "/etc/exports 파일이 존재하지 않습니다. NFS 서비스가 설정되지 않았을 수 있습니다."
-    exit 1
-fi
+NIS_SERVICES=("ypserv" "ypbind" "ypxfrd" "rpc.yppasswdd" "rpc.ypupdated")
+NIS_SCRIPT_PATH="/etc/rc.d/rc*.d/"
+NIS_SERVICE_CHECK_CMD="ps -ef | egrep 'ypserv|ypbind|ypxfrd|rpc.yppasswdd|rpc.ypupdated'"
 
-if grep -q '^\s*/.* *(rw|ro|)' /etc/exports; then
-    echo "취약: /etc/exports 파일에 everyone 공유가 설정되어 있습니다."
-else
-    echo "양호: /etc/exports 파일에 everyone 공유가 설정되어 있지 않습니다."
-fi
+NIS_check_and_disable_services() {
+    local NIS_service
+    local NIS_is_vulnerable=false
 
-if systemctl is-active --quiet nfs-server; then
-    echo "NFS 서비스가 실행 중입니다."
-    
-    echo "현재 /etc/exports 파일의 내용을 점검합니다:"
-    cat /etc/exports
+    for NIS_service in "${NIS_SERVICES[@]}"; do
+        if eval "$NIS_SERVICE_CHECK_CMD" | grep "$NIS_service" > /dev/null; then
+            echo "취약: $NIS_service 서비스가 활성화 되어 있습니다."
+            NIS_is_vulnerable=true
+            NIS_disable_service "$NIS_service"
+        fi
+    done
 
-    echo "추가할 디렉토리와 호스트명을 입력하십시오 (예: /stand host1 host2 또는 /stand 192.168.1.1):"
-    read new_export
+    if [ "$NIS_is_vulnerable" = true ]; then
+        echo "취약: 불필요한 NIS 서비스가 활성화 되어 있습니다. 서비스를 비활성화합니다."
+    else
+        echo "양호: 불필요한 NIS 서비스가 비활성화 되어 있습니다."
+    fi
+}
 
-    echo "$new_export" >> /etc/exports
+NIS_disable_service() {
+    local NIS_service=$1
+    local NIS_service_pid
 
-    echo "/etc/exports 파일에 새로운 설정이 추가되었습니다:"
-    cat /etc/exports
+    NIS_service_pid=$(pgrep "$NIS_service")
+    if [ -n "$NIS_service_pid" ]; then
+        kill -9 "$NIS_service_pid"
+        echo "$NIS_service 서비스를 종료했습니다. (PID: $NIS_service_pid)"
+    fi
 
-    echo "NFS 서비스를 다시 시작합니다."
-    systemctl restart nfs-server
+    for script in $(ls -1 "$NIS_SCRIPT_PATH" | grep "$NIS_service"); do
+        mv "$script" "${script}.bak"
+        echo "$script 파일명을 ${script}.bak로 변경했습니다."
+    done
+}
+NIS_check_and_disable_services
 
-    echo "NFS 서비스가 재시작되었습니다."
-else
-    echo "NFS 서비스가 실행 중이지 않습니다. 불필요한 NFS 서비스를 사용하지 않으므로 양호합니다."
-fi
+# u-29 3.11

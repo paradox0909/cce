@@ -743,3 +743,197 @@ else
     fi
 fi
 
+# u-27 3.9 Check RPC service
+rpc_RPC_SERVICES=("rpc.cmsd")
+rpc_INETD_CONF="/etc/inetd.conf"
+
+rpc_check_and_disable_rpc_services() {
+    local rpc_service
+    local rpc_is_vulnerable=false
+
+    for rpc_service in "${rpc_RPC_SERVICES[@]}"; do
+        if grep -E "^$rpc_service" "$rpc_INETD_CONF" > /dev/null; then
+            echo "취약: $rpc_service 서비스가 활성화 되어 있습니다."
+            rpc_is_vulnerable=true
+            sed -i.bak -e "s|^$rpc_service|#$rpc_service|" "$rpc_INETD_CONF"
+        fi
+    done
+
+    if [ "$rpc_is_vulnerable" = true ]; then
+        echo "취약: 불필요한 RPC 서비스가 활성화 되어 있습니다. 서비스를 비활성화합니다."
+        rpc_restart_inetd
+    else
+        echo "양호: 불필요한 RPC 서비스가 비활성화 되어 있습니다."
+    fi
+}
+rpc_restart_inetd() {
+
+    rpc_INETD_PID=$(pgrep inetd)
+    
+    if [ -n "$rpc_INETD_PID" ]; then
+        echo "inetd 서비스 재시작 중... (PID: $rpc_INETD_PID)"
+        kill -HUP "$rpc_INETD_PID"
+        echo "inetd 서비스가 재시작되었습니다."
+    else
+        echo "inetd 서비스가 실행 중이지 않습니다."
+    fi
+}
+
+rpc_check_and_disable_rpc_services
+
+# u-28 3.10 NIS, NIS+ Check
+
+NIS_SERVICES=("ypserv" "ypbind" "ypxfrd" "rpc.yppasswdd" "rpc.ypupdated")
+NIS_SCRIPT_PATH="/etc/rc.d/rc*.d/"
+NIS_SERVICE_CHECK_CMD="ps -ef | egrep 'ypserv|ypbind|ypxfrd|rpc.yppasswdd|rpc.ypupdated'"
+
+NIS_check_and_disable_services() {
+    local NIS_service
+    local NIS_is_vulnerable=false
+
+    for NIS_service in "${NIS_SERVICES[@]}"; do
+        if eval "$NIS_SERVICE_CHECK_CMD" | grep "$NIS_service" > /dev/null; then
+            echo "취약: $NIS_service 서비스가 활성화 되어 있습니다."
+            NIS_is_vulnerable=true
+            NIS_disable_service "$NIS_service"
+        fi
+    done
+
+    if [ "$NIS_is_vulnerable" = true ]; then
+        echo "취약: 불필요한 NIS 서비스가 활성화 되어 있습니다. 서비스를 비활성화합니다."
+    else
+        echo "양호: 불필요한 NIS 서비스가 비활성화 되어 있습니다."
+    fi
+}
+
+NIS_disable_service() {
+    local NIS_service=$1
+    local NIS_service_pid
+
+    NIS_service_pid=$(pgrep "$NIS_service")
+    if [ -n "$NIS_service_pid" ]; then
+        kill -9 "$NIS_service_pid"
+        echo "$NIS_service 서비스를 종료했습니다. (PID: $NIS_service_pid)"
+    fi
+
+    for script in $(ls -1 "$NIS_SCRIPT_PATH" | grep "$NIS_service"); do
+        mv "$script" "${script}.bak"
+        echo "$script 파일명을 ${script}.bak로 변경했습니다."
+    done
+}
+NIS_check_and_disable_services
+
+
+# u-29 3.11 tftp, talk service disable
+tftp_talk_SERVICES=("tftp" "talk" "ntalk")
+tftp_talk_INETD_CONF="/etc/inetd.conf"
+tftp_talk_XINETD_DIR="/etc/xinetd.d"
+
+tftp_talk_check_and_disable_services() {
+    local tftp_talk_service
+    local tftp_talk_is_vulnerable=false
+
+    for tftp_talk_service in "${tftp_talk_SERVICES[@]}"; do
+        if grep -E "^$tftp_talk_service" "$tftp_talk_INETD_CONF" > /dev/null 2>&1; then
+            echo "취약: $tftp_talk_service 서비스가 inetd.conf에서 활성화 되어 있습니다."
+            tftp_talk_is_vulnerable=true
+            sed -i.bak -e "s|^$tftp_talk_service|#$tftp_talk_service|" "$tftp_talk_INETD_CONF"
+        fi
+        if [ -f "$tftp_talk_XINETD_DIR/$tftp_talk_service" ]; then
+            if grep -E "disable\s*=\s*no" "$tftp_talk_XINETD_DIR/$tftp_talk_service" > /dev/null 2>&1; then
+                echo "취약: $tftp_talk_service 서비스가 xinetd에서 활성화 되어 있습니다."
+                tftp_talk_is_vulnerable=true
+                sed -i.bak -e "s|disable\s*=\s*no|disable = yes|" "$tftp_talk_XINETD_DIR/$tftp_talk_service"
+            fi
+        fi
+    done
+
+    if [ "$tftp_talk_is_vulnerable" = true ]; then
+        echo "취약: 불필요한 서비스가 활성화 되어 있습니다. 서비스를 비활성화합니다."
+        tftp_talk_restart_inetd
+    else
+        echo "양호: 불필요한 서비스가 비활성화 되어 있습니다."
+    fi
+}
+
+tftp_talk_restart_inetd() {
+    if pgrep inetd > /dev/null 2>&1; then
+        echo "inetd 서비스를 재시작합니다."
+        pkill -HUP inetd
+        echo "inetd 서비스가 재시작되었습니다."
+    fi
+    if pgrep xinetd > /dev/null 2>&1; then
+        echo "xinetd 서비스를 재시작합니다."
+        pkill -HUP xinetd
+        echo "xinetd 서비스가 재시작되었습니다."
+    fi
+}
+
+tftp_talk_check_and_disable_services
+
+# u-30 Sendmail Version Check
+check_sendmail_running() {
+    if ps -ef | grep -v grep | grep sendmail > /dev/null
+    then
+        echo "Sendmail이 실행 중입니다."
+        return 0
+    else
+        echo "Sendmail이 실행 중이지 않습니다."
+        return 1
+    fi
+}
+
+get_sendmail_version() {
+    sendmail -d0.1 -bv root | grep -i version
+}
+
+update_sendmail() {
+    echo "Sendmail을 업데이트 중..."
+    apt update
+    apt install sendmail -y
+    apt update sendmail -y
+}
+
+sendmail_main() {
+    echo "Sendmail 서비스 확인 중..."
+    if check_sendmail_running
+    then
+        echo "Sendmail 버전 확인 중..."
+        sendmail_version=$(get_sendmail_version)
+        echo "현재 Sendmail 버전: $sendmail_version"
+        
+        sendmail_latest_version="8.15.2"
+        
+        if [[ $sendmail_version == *"$sendmail_latest_version"* ]]
+        then
+            echo "Sendmail이 최신 버전입니다."
+        else
+            echo "Sendmail이 최신 버전이 아닙니다."
+            update_sendmail
+            apply_sendmail_patches
+        fi
+    else
+        echo "Sendmail 서비스가 실행 중이지 않습니다. 조치가 필요 없습니다."
+    fi
+}
+sendmail_main
+
+# u-31 Spam Email relay limit
+check_sendmail_relay() {
+  echo "SMTP 릴레이 제한 설정 확인 중..."
+  if ps -ef | grep -v grep | grep sendmail > /dev/null; then
+    echo "Sendmail 서비스가 실행 중입니다."
+
+    if grep -q "R$\*" /etc/mail/sendmail.cf && grep -q "550 Relaying denied" /etc/mail/sendmail.cf; then
+      echo "SMTP 릴레이 제한이 설정되어 있습니다."
+    else
+      echo "SMTP 릴레이 제한이 설정되어 있지 않습니다. 보안 설정이 필요합니다."
+    fi
+  else
+    echo "Sendmail 서비스가 실행 중이지 않습니다."
+  fi
+}
+
+check_sendmail_relay
+
+# u-33 Normal User Sendmail prevent execution
