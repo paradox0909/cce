@@ -871,7 +871,7 @@ tftp_talk_restart_inetd() {
 
 tftp_talk_check_and_disable_services
 
-# u-30 Sendmail Version Check
+# u-30 3.12 Sendmail Version Check
 check_sendmail_running() {
     if ps -ef | grep -v grep | grep sendmail > /dev/null
     then
@@ -918,7 +918,7 @@ sendmail_main() {
 }
 sendmail_main
 
-# u-31 Spam Email relay limit
+# u-31 3.13 Spam Email relay limit
 check_sendmail_relay() {
   echo "SMTP 릴레이 제한 설정 확인 중..."
   if ps -ef | grep -v grep | grep sendmail > /dev/null; then
@@ -936,4 +936,236 @@ check_sendmail_relay() {
 
 check_sendmail_relay
 
-# u-33 Normal User Sendmail prevent execution
+# u-32 3.14 Normal User Sendmail prevent execution
+SENDMAIL_CF="/etc/mail/sendmail.cf"
+SENDMAIL_STATUS=$(systemctl is-active sendmail)
+cp $SENDMAIL_CF $SENDMAIL_CF.bak
+
+add_restrictqrun_option() {
+    if grep -q "O PrivacyOptions=.*restrictqrun" $SENDMAIL_CF; then
+        echo "restrictqrun 옵션이 이미 설정되어 있습니다."
+    else
+        sed -i '/O PrivacyOptions=/ s/$/, restrictqrun/' $SENDMAIL_CF
+        echo "restrictqrun 옵션이 추가되었습니다."
+    fi
+}
+
+
+if [[ "$SENDMAIL_STATUS" == "inactive" ]]; then
+    echo "SMTP 서비스가 사용되지 않습니다. -> 양호"
+else
+    if grep -q "O PrivacyOptions=.*restrictqrun" $SENDMAIL_CF; then
+        echo "일반 사용자의 Sendmail 실행 방지가 설정되어 있습니다. -> 양호"
+    else
+        echo "SMTP 서비스 사용 중이며, 일반 사용자의 Sendmail 실행 방지가 설정되어 있지 않습니다. -> 취약"
+        add_restrictqrun_option
+        systemctl restart sendmail
+        if [[ $? -eq 0 ]]; then
+            echo "Sendmail 서비스가 성공적으로 재시작되었습니다."
+        else
+            echo "Sendmail 서비스 재시작에 실패하였습니다."
+        fi
+    fi
+fi
+
+# u-33 3.15 DNS Security Version Patch
+echo "u-33 DNS 보안 버전 패치는 수동 점검이 필요합니다. "
+dns_services=("named" "dnsmasq" "systemd-resolved")
+dns_active=false
+
+for service in "${dns_services[@]}"
+do
+    status=$(systemctl is-active $service)
+    if [ "$status" == "active" ]; then
+        dns_active=true
+        echo "DNS 서비스 사용 중: $service"
+    fi
+done
+
+if [ "$dns_active" == false ]; then
+    echo "DNS 서비스가 사용되지 않습니다."
+fi
+
+# u-34 3.16 DNS Zone Transfer Settings
+dns_version_DNS_PROCESS=$(ps -ef | grep named | grep -v "grep")
+
+if [ -z "$dns_version_DNS_PROCESS" ]; then
+    echo "양호"
+    exit 0
+fi
+dns_version_ALLOW_TRANSFER=$(cat /etc/named.conf 2>/dev/null | grep 'allow-transfer')
+dns_version_XFRNETS=$(cat /etc/named.boot 2>/dev/null | grep 'xfrnets')
+
+if [ -n "$dns_version_ALLOW_TRANSFER" ] || [ -n "$dns_version_XFRNETS" ]; then
+    if echo "$dns_version_ALLOW_TRANSFER" | grep -q -E '(\{|;|")' && [ -z "$(echo "$dns_version_ALLOW_TRANSFER" | grep 'any')" ]; then
+        echo "양호"
+    elif echo "$dns_version_XFRNETS" | grep -q -E '(\{|;|")' && [ -z "$(echo "$dns_version_XFRNETS" | grep 'any')" ]; then
+        echo "양호"
+    else
+        echo "취약"
+    fi
+else
+    echo "취약"
+fi
+
+# u-35 3.17 webservice directory delete listing
+web_dir_APACHE_HOME="/[Apache_home]"
+web_dir_HTTPD_CONF="${web_dir_APACHE_HOME}/conf/httpd.conf"
+web_dir_INDEXES_OPTIONS=$(grep -E '^ *Options .*Indexes' "${web_dir_HTTPD_CONF}")
+
+if [ -z "${web_dir_INDEXES_OPTIONS}" ]; then
+    echo "양호: 디렉터리 리스팅이 제거되어 있습니다."
+else
+    echo "취약: 디렉터리 리스팅이 활성화되어 있습니다."
+fi
+sed -i 's/^\( *Options .*\)Indexes\(.*\)/\1\2/g' "${web_dir_HTTPD_CONF}"
+systemctl restart apache2  
+
+# u-36 3.18 Webservice web process Permission restrictions
+process_permission_httpd_conf="/[Apache_home]/conf/httpd.conf"
+process_permission_apache_user=$(grep -E '^User ' $process_permission_httpd_conf | awk '{print $2}')
+
+if [ "$process_permission_apache_user" == "root" ]; then
+    echo "취약"
+    echo "root 이름을 적절한 사용자 값으로 변경해야 합니다. "
+else
+    echo "양호"
+fi
+ 
+# u-37 3.19 Webservice parent directory Forbidden
+#!/bin/bash
+
+# 웹 서버의 홈 디렉토리 경로 설정
+par_dir_APACHE_HOME="/path/to/apache"
+
+# 검사할 디렉토리 목록 설정
+par_dir_DIRECTORIES=(
+  "/path/to/web/directory1"
+  "/path/to/web/directory2"
+  "/path/to/web/directory3"
+)
+
+echo "검사 시작..."
+
+for par_dir_dir in "${par_dir_DIRECTORIES[@]}"
+do
+  par_dir_allow_override=$(grep -i "^<Directory \"$par_dir_dir\">" $par_dir_APACHE_HOME/conf/httpd.conf -A 5 | grep "AllowOverride")
+
+  if [[ -z "$par_dir_allow_override" ]]; then
+    echo "에러: $par_dir_dir 디렉토리의 AllowOverride 설정을 찾을 수 없습니다."
+    continue
+  fi
+
+  if [[ "$par_dir_allow_override" == *AuthConfig* || "$par_dir_allow_override" == *All* ]]; then
+    echo "$par_dir_dir: 양호 - 상위 디렉터리 접근 제한이 설정되어 있습니다."
+  else
+    echo "$par_dir_dir: 취약 - 상위 디렉터리 접근 제한이 설정되어 있지 않습니다."
+  fi
+done
+echo "검사 완료."
+
+# u-38 3.20 Webservice Delete Remove unnecessary files
+web_remove_file_APACHE_HOME="/usr/local/apache"
+
+web_remove_file_UNNECESSARY_FILES=(
+    "${web_remove_file_APACHE_HOME}/htdocs/manual"
+    "${web_remove_file_APACHE_HOME}/manual"
+)
+echo "Apache 설치 시 생성된 불필요한 파일 및 디렉터리 제거 스크립트를 시작합니다."
+
+web_remove_file_remove_unnecessary_files() {
+    local path="$1"
+    if [ -d "$path" ]; then
+        rm -rf "$path"
+        echo "제거: $path"
+    else
+        echo "경고: $path 가 존재하지 않습니다."
+    fi
+}
+
+for web_remove_file_file_or_dir in "${web_remove_file_UNNECESSARY_FILES[@]}"; do
+    web_remove_file_remove_unnecessary_files "$web_remove_file_file_or_dir"
+done
+
+echo "불필요한 파일 및 디렉터리 제거 완료"
+
+web_remove_file_remaining_files=0
+for web_remove_file_file_or_dir in "${web_remove_file_UNNECESSARY_FILES[@]}"; do
+    if [ -e "$web_remove_file_file_or_dir" ]; then
+        web_remove_file_remaining_files=$((web_remove_file_remaining_files + 1))
+    fi
+done
+
+if [ "$web_remove_file_remaining_files" -gt 0 ]; then
+    echo "취약: 불필요한 파일 또는 디렉터리가 남아 있습니다."
+else
+    echo "양호: 불필요한 파일 및 디렉터리가 모두 제거되었습니다."
+fi
+
+# u-39 3.21 No Webservice Link
+no_link_apache_conf="/Apache_home/conf/httpd.conf"
+
+check_follow_symlinks() {
+    local result=$(grep -E "<Directory\s+" $no_link_apache_conf | while read -r line; do
+        if [[ $line =~ \<Directory ]]; then
+            no_link_dir=$(echo $line | sed -r 's/.*<Directory\s+(\S+).*/\1/')
+        elif [[ $line =~ Options ]]; then
+            if [[ $line =~ FollowSymLinks ]]; then
+                echo "양호"
+                exit 0
+            fi
+        fi
+    done)
+    
+    echo "취약"
+}
+
+check_follow_symlinks
+
+# u-40 3.22 Limit Webserver File upload and download
+up_down_load_HTTPD_CONF="/etc/httpd/conf/httpd.conf"
+up_down_load_FILE_SIZE_LIMIT="5242880"
+
+up_down_load_update_limit_request_body() {
+    local up_down_load_limit_directive="LimitRequestBody"
+
+    sed -i.bak -E "/<Directory\s+\S+>/,/<\/Directory>/ {
+        /$up_down_load_limit_directive/ {
+            s/^\s*#*\s*($up_down_load_limit_directive\s+)[0-9]+.*$/\1$up_down_load_FILE_SIZE_LIMIT/
+        }
+        /^(\s*#*\s*)($up_down_load_limit_directive\s+)?[0-9]+/! {
+            /^\s*<\/Directory>/ i \
+            LimitRequestBody $up_down_load_FILE_SIZE_LIMIT
+        }
+    }" "$up_down_load_HTTPD_CONF"
+
+    systemctl reload httpd
+}
+
+up_down_load_update_limit_request_body
+
+# u-41 3.23 Separation of web service areas
+separation_HTTPD_CONF="/lApache_homelcont/httpd.conf"
+
+separation_DOCUMENT_ROOTS=(
+    "/usr/local/apache/htdocs"
+    "/usr/local/apache2/htdocs"
+    "/var/www/html"
+)
+grep -Ei "\bDocumentRoot\b" "$separation_HTTPD_CONF" | while read -r separation_line; do
+    separation_matched=0
+    for separation_root in "${separation_DOCUMENT_ROOTS[@]}"; do
+        if [[ "$separation_line" == *"$separation_root"* ]]; then
+            separation_matched=1
+            break
+        fi
+    done
+
+    if [ $separation_matched -eq 0 ]; then
+        echo "취약: DocumentRoot를 기본 디렉터리로 지정한 경우가 발견되었습니다."
+        echo "해당 설정: $separation_line"
+        echo
+    fi
+done
+
+
