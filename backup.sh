@@ -730,8 +730,7 @@ if [ -z "$automount_SERVICE_STATUS" ]; then
     echo "양호"
 else
     echo "취약"
-
-
+ 
     if [ "$1" = "-fix" ]; then
         echo "-fix 인자에 따라 수정이 진행됩니다."
         automount_PID=$(echo "$automount_SERVICE_STATUS" | awk '{print $2}')
