@@ -1175,4 +1175,117 @@ grep -Ei "\bDocumentRoot\b" "$separation_HTTPD_CONF" | while read -r separation_
     fi
 done
 echo "모든 프로세스가 종료되었습니다." 
+
+# u-60 ssh connection allow
+ssh_ssh_check=$(ps aux | grep -v grep | grep sshd)
+
+ssh_telnet_check=$(ps aux | grep -v grep | grep telnetd)
+
+if [ -n "$ssh_ssh_check" ]; then
+    if [ -z "$ssh_telnet_check" ]; then
+        echo "양호"
+    else
+        echo "Telnet이 설치되어 있어 취약합니다."
+    fi
+else
+    echo "취약: SSH 프로토콜을 사용하지 않습니다."
+fi
+
+# u-61 ftp service check
+if ps -ef | grep -q '[v]sftpd'; then
+    echo "FTP 서비스를 중지합니다..."
+    service vsftpd stop
+else
+    echo "FTP 서비스가 이미 중지되어 있습니다."
+fi
+
+# u-62 ftp account shell limit
+read -p "FTP 계정 이름을 입력하세요: " ftp_shell_user
+
+if [ -z "$ftp_shell_user" ]; then
+    echo "FTP 계정 이름을 입력해야 합니다."
+fi
+
+ftp_shell_user_info=$(grep "^$ftp_shell_user:" /etc/passwd)
+
+if [ -z "$ftp_shell_user_info" ]; then
+    echo "FTP 계정 '$ftp_shell_user'이(가) 존재하지 않습니다."
+fi
+
+ftp_shell=$(echo "$ftp_shell_user_info" | cut -d: -f7)
+
+if [ "$ftp_shell" = "/bin/false" ]; then
+    echo "양호: FTP 계정 '$ftp_shell_user'은(는) 제한된 쉘 '/bin/false'을 사용 중입니다."
+else
+    echo "취약: FTP 계정 '$ftp_shell_user'은(는) 제한된 쉘 '/bin/false'을 사용하지 않고 있습니다."
+fi
+
+# u-63 ftp file owner and permission settigs
+ftp_file_path="/etc/ftpusers"
+
+ftp_file_owner=$(stat -c "%U" "$ftp_file_path")
+if [ "$ftp_file_owner" = "root" ]; then
+    ftp_file_permissions=$(stat -c "%a" "$ftp_file_path")
+    if [ "$ftp_file_permissions" -le 640 ]; then
+        echo "양호: ftpusers 파일의 소유자가 root이고, 권한이 640 이하입니다."
+        exit 0
+    else
+        echo "취약: ftpusers 파일의 권한이 640 이하가 아닙니다."
+    fi
+else
+    echo "취약: ftpusers 파일의 소유자가 root가 아닙니다."
+fi
+
+# u-64 ftpusers file settings
+ftp_file_service=$(systemctl is-active vsftpd)
+if [ "$ftp_file_service" != "active" ]; then
+    echo "양호 - FTP 서비스가 비활성화 되어 있습니다."
+    exit 0
+fi
+
+ftp_file_vsftpd_conf="/etc/vsftpd.conf"
+if ! grep -q "^userlist_deny=NO" "$ftp_file_vsftpd_conf"; then
+    echo "양호 - vsftpd.conf 파일에서 root 계정 접속을 허용하지 않도록 설정되어 있습니다."
+else
+    echo "취약 - vsftpd.conf 파일에서 root 계정 접속을 허용하고 있습니다."
+fi
+
+# u-65 at 파일 소유자 및 권한 설정
+at_allow_file="/etc/at.allow"
+at_deny_file="/etc/at.deny"
+
+if [[ ! -f $at_allow_file || ! -f $at_deny_file ]]; then
+    echo "Error: at.allow or at.deny file not found."
+fi
+
+at_allow_owner=$(stat -c "%U" $at_allow_file)
+at_deny_owner=$(stat -c "%U" $at_deny_file)
+at_allow_perms=$(stat -c "%a" $at_allow_file)
+at_deny_perms=$(stat -c "%a" $at_deny_file)
+
+if [[ $at_allow_owner != "root" || $at_deny_owner != "root" ]]; then
+    echo "관리자(root)만이 at.allow 및 at.deny 파일을 제어할 수 있어야 합니다."
+    exit 1
+fi
+
+if [[ $at_allow_perms -le 640 && $at_deny_perms -le 640 ]]; then
+    echo "양호: at.allow 및 at.deny 파일 권한이 640 이하입니다."
+else
+    echo "취약: at.allow 또는 at.deny 파일의 권한이 640을 초과하거나, 이 파일들이 일반 사용자에게 쓰기 권한이 있습니다."
+fi
+
+if grep -q "^at$" /etc/shells && ! grep -q "^at$" /etc/securetty; then
+    echo "취약: at 명령어가 일반 사용자에게 허용되어 있습니다."
+else
+    echo "양호: at 명령어가 일반 사용자에게 제한되어 있습니다."
+fi
+
+# u-66 SNMP service test
+if systemctl is-active --quiet snmpd; then
+    echo "취약" 
+else
+    echo "양호" 
+fi
+
+
 exit 1
