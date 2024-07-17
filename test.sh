@@ -1,9 +1,14 @@
-SNMP_CONF="/etc/snmp/snmp.conf"
 
-community_name=$(grep -Po '(?<=com2sec notConfigUser default )\S+' "$SNMP_CONF")
+log_set_log_file="/var/log/messages"
 
-if [[ "$community_name" == "public" || "$community_name" == "private" ]]; then
-    echo "취약"
-else
-    echo "양호"
-fi
+check_log_file() {
+    local file="$log_set_log_file"
+
+    if [ -f "$file" ]; then
+        echo "양호: 로그 파일이 존재합니다."
+    else
+        echo "취약: 로그 파일이 존재하지 않습니다."
+    fi
+}
+
+check_log_file

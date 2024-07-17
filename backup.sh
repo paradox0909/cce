@@ -1298,5 +1298,107 @@ else
     echo "양호"
 fi
 
+# u-68 warning alert if u log on
+logon_check_login_message() {
+    logon_service=$1
+    logon_config_file=$2
+    
+    if grep -q "login.warning" $logon_config_file; then
+        echo "$logon_service 서비스에 로그온 메시지가 설정되어 있습니다."
+        return 0
+    else
+        echo "$logon_service 서비스에 로그온 메시지가 설정되어 있지 않습니다."
+        return 1 
+    fi
+}
+
+
+echo "서버 및 Telnet, FTP, SMTP, DNS 서비스의 로그온 메시지 설정 여부를 확인합니다."
+
+logon_telnet_config_file="/etc/inetd.conf"
+logon_check_login_message "Telnet" $logon_telnet_config_file
+logon_telnet_result=$?
+
+logon_ftp_config_file="/etc/inetd.conf"
+logon_check_login_message "FTP" $logon_ftp_config_file
+logon_ftp_result=$?
+
+logon_smtp_config_file="/etc/sendmail.cf"  # Assuming Sendmail is used for SMTP
+logon_check_login_message "SMTP" $logon_smtp_config_file
+logon_smtp_result=$?
+
+logon_dns_config_file="/etc/named.conf"
+logon_check_login_message "DNS" $logon_dns_config_file
+logon_dns_result=$?
+
+if [ $logon_telnet_result -eq 0 ] && [ $logon_ftp_result -eq 0 ] && [ $logon_smtp_result -eq 0 ] && [ $logon_dns_result -eq 0 ]; then
+    echo "양호: 모든 서비스에 로그온 메시지가 설정되어 있습니다."
+else
+    echo "취약: 다음 서비스 중 로그온 메시지가 설정되지 않았습니다."
+    [ $logon_telnet_result -ne 0 ] && echo "- Telnet"
+    [ $logon_ftp_result -ne 0 ] && echo "- FTP"
+    [ $logon_smtp_result -ne 0 ] && echo "- SMTP"
+    [ $logon_dns_result -ne 0 ] && echo "- DNS"
+
+    echo "조치 방법: 각 서비스의 설정 파일($logon_telnet_config_file, $logon_ftp_config_file, $logon_smtp_config_file, $logon_dns_config_file)에서 login.warning 설정을 추가하고, inetd 데몬을 재시작합니다."
+fi
+
+# u-69 NFS Setting file access permissions
+nfs_set_file="/etc/exports"
+nfs_set_owner=$(stat -c '%U' $nfs_set_file)
+
+nfs_set_permissions=$(stat -c '%a' $nfs_set_file | cut -c 2-4)
+
+if [ "$nfs_set_owner" = "root" ] && [ "$nfs_set_permissions" -le 644 ]; then
+    echo "양호"
+else
+    echo "취약"
+fi
+
+# u-70 expn, vrfy 명령어 제한
+#!/bin/bash
+
+if [ ! -f /etc/mail/sendmail.cf ]; then
+    echo "sendmail.cf 파일을 찾을 수 없습니다. 취약 상태로 간주합니다."
+    exit 1
+fi
+
+privacy_options=$(grep ^O PrivacyOptions /etc/mail/sendmail.cf | awk '{print $3}')
+
+if [[ $privacy_options == *noexpn* && $privacy_options == *novrfy* ]]; then
+    echo "양호: SMTP 서비스가 미사용이거나 noexpn, novrfy 옵션이 설정되어 있습니다."
+else
+    echo "취약: SMTP 서비스가 사용 중이거나 noexpn, novrfy 옵션이 설정되어 있지 않습니다."
+fi
+# u-71 apache webservice information hide
+hide_APACHE_CONF="/etc/apache2/apache2.conf"
+
+hide_server_tokens=$(grep -i "^ServerTokens" $hide_APACHE_CONF | awk '{print $2}')
+hide_server_signature=$(grep -i "^ServerSignature" $hide_APACHE_CONF | awk '{print $2}')
+
+if [[ "$hide_server_tokens" == "Prod" && "$hide_server_signature" == "Off" ]]; then
+    echo "양호: ServerTokens이 Prod로, ServerSignature가 Off로 설정되어 있습니다."
+else
+    echo "취약: ServerTokens이 Prod로, ServerSignature가 Off로 설정되어 있지 않습니다."
+fi
+
+# u-42
+
+# u-43
+# u-72 log setting
+log_set_log_file="/var/log/messages"
+
+check_log_file() {
+    local file="$log_set_log_file"
+
+    if [ -f "$file" ]; then
+        echo "양호: 로그 파일이 존재합니다."
+    else
+        echo "취약: 로그 파일이 존재하지 않습니다."
+    fi
+}
+
+check_log_file
+
 
 exit 1
