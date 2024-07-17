@@ -1,8 +1,9 @@
-#!/bin/bash
+SNMP_CONF="/etc/snmp/snmp.conf"
 
-# SNMP 서비스 상태 확인
-if systemctl is-active --quiet snmpd; then
-    echo "취약"   # SNMP 서비스가 구동 중인 경우
+community_name=$(grep -Po '(?<=com2sec notConfigUser default )\S+' "$SNMP_CONF")
+
+if [[ "$community_name" == "public" || "$community_name" == "private" ]]; then
+    echo "취약"
 else
-    echo "양호"   # SNMP 서비스가 구동되지 않은 경우
+    echo "양호"
 fi
