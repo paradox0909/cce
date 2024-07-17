@@ -211,6 +211,21 @@ if [ "$1" = "-fix" ]; then
     fi
 fi
 
+# 2-4 /etc/shadow 파일 소유자 및 권한 설정
+
+shadow_owner=$1(ls -l /etc/shadow | awk '{print $3}')
+shadow_permissions=$(stat -c %a /etc/shadow)
+
+if [ "$shadow_owner" = "root" && [ "$shadow_permissions" = -le 400 ]]; then
+    echo "양호"
+else
+    echo "취약"
+    chown root /etc/shadow
+    chown 400 /etc/shadow
+
+fi
+echo "/etc/shadow 점검 및 수정 완료"
+
 #2-5 /etc/hosts 파일 소유자 및 권한 설정
 hosts_file_path="/etc/hosts"
 host_file_owner=$(stat -c %U "$hosts_file_path")
@@ -331,6 +346,36 @@ if [ "$1" = "-fix" ]; then
 
 fi
 
+#u-12 /etc/services 파일 소유자 및 권한 설정
+check_services_file() {
+    servi_result="양호"
+
+    if [ ! -e /etc/services ]; then
+        echo "취약: /etc/services 파일이 존재하지 않습니다."
+        servi_result="취약"
+    fi
+
+    servi_OWNER=$(stat -c %U /etc/services)
+    if [ "$servi_OWNER" != "root" ] && [ "$servi_OWNER" != "bin" ] && [ "$servi_OWNER" != "sys" ]; then
+        echo "취약: /etc/services 파일 소유자가 root, bin, sys 중 하나가 아닙니다."
+        servi_result="취약"
+    fi
+
+    servi_PERMS=$(stat -c %a /etc/services)
+    
+    if ! echo "$servi_PERMS" | grep -qE '^[0-7]{3}$'; then
+        echo "취약: /etc/services 파일 권한이 올바르지 않습니다."
+        servi_result="취약"
+    elif [ "$servi_PERMS" -gt 644 ]; then
+        echo "취약: /etc/services 파일 권한이 644 이하가 아닙니다."
+        servi_result="취약"
+    fi
+
+    echo "$servi_result"
+}
+
+check_services_file
+
 #2-9 SUID, SGID, Setiing file check
 SUID_SGID_SEARCH_DIR="/"
 
@@ -376,6 +421,32 @@ if [ "$1" = "-fix" ]; then
 fi
 
 #2-10 User, System Startup file & Environment file owner and authority Settings
+env_sys_files=(".profile" ".kshrc" ".cshrc" ".bashrc" ".bash_profile" ".login" ".exrc" ".netrc")
+env_sys_home_dir=$HOME
+env_sys_user=$(whoami)
+
+env_sys_check_file() {
+    env_sys_file_path=$1
+    if [ -f "$env_sys_file_path" ]; then
+        env_sys_owner=$(stat -c '%U' "$env_sys_file_path")
+        env_sys_perms=$(stat -c '%a' "$env_sys_file_path")
+        if [ "$env_sys_owner" == "root" ] || [ "$env_sys_owner" == "$env_sys_user" ]; then
+            if [ "${env_sys_perms: -1}" -le 2 ] && [ "${env_sys_perms: -2:1}" -le 2 ] && [ "${env_sys_perms: -3:1}" -le 6 ]; then
+                echo "$env_sys_file_path: 양호"
+            else
+                echo "$env_sys_file_path: 취약"
+            fi
+        else
+            echo "$env_sys_file_path: 취약"
+        fi
+    else
+        echo "$env_sys_file_path: 파일이 존재하지 않습니다"
+    fi
+}
+
+for env_sys_file in "${env_sys_files[@]}"; do
+    env_sys_check_file "$env_sys_home_dir/$env_sys_file"
+done
 
 #2-11 world writealble file check
 world_writable_critical_files=(
