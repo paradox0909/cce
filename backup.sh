@@ -1334,6 +1334,7 @@ at_deny_perms=$(stat -c "%a" $at_deny_file)
 
 if [[ $at_allow_owner != "root" || $at_deny_owner != "root" ]]; then
     echo "관리자(root)만이 at.allow 및 at.deny 파일을 제어할 수 있어야 합니다."
+
 fi
 
 if [[ $at_allow_perms -le 640 && $at_deny_perms -le 640 ]]; then
@@ -1469,3 +1470,5 @@ check_log_file
 
 
 exit 1
+
+#test code
