@@ -1299,7 +1299,6 @@ if [ "$ftp_file_owner" = "root" ]; then
     ftp_file_permissions=$(stat -c "%a" "$ftp_file_path")
     if [ "$ftp_file_permissions" -le 640 ]; then
         echo "양호: ftpusers 파일의 소유자가 root이고, 권한이 640 이하입니다."
-        exit 0
     else
         echo "취약: ftpusers 파일의 권한이 640 이하가 아닙니다."
     fi
@@ -1311,7 +1310,6 @@ fi
 ftp_file_service=$(systemctl is-active vsftpd)
 if [ "$ftp_file_service" != "active" ]; then
     echo "양호 - FTP 서비스가 비활성화 되어 있습니다."
-    exit 0
 fi
 
 ftp_file_vsftpd_conf="/etc/vsftpd.conf"
@@ -1336,7 +1334,6 @@ at_deny_perms=$(stat -c "%a" $at_deny_file)
 
 if [[ $at_allow_owner != "root" || $at_deny_owner != "root" ]]; then
     echo "관리자(root)만이 at.allow 및 at.deny 파일을 제어할 수 있어야 합니다."
-    exit 1
 fi
 
 if [[ $at_allow_perms -le 640 && $at_deny_perms -le 640 ]]; then
@@ -1431,7 +1428,6 @@ fi
 
 if [ ! -f /etc/mail/sendmail.cf ]; then
     echo "sendmail.cf 파일을 찾을 수 없습니다. 취약 상태로 간주합니다."
-    exit 1
 fi
 
 privacy_options=$(grep ^O PrivacyOptions /etc/mail/sendmail.cf | awk '{print $3}')
