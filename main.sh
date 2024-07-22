@@ -1734,8 +1734,9 @@ else
 fi
 
 # u-42
-
+echo "최신 보안패치 및 벤더 권고사항 적용은 수동 진단을 요망합니다."
 # u-43
+echo "로그의 정기적 검토 및 보고는 수동 진단을 요망합니다."
 # u-72 log setting
 log_set_log_file="/var/log/messages"
 
