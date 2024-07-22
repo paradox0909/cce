@@ -1,26 +1,32 @@
-env_sys_files=(".profile" ".kshrc" ".cshrc" ".bashrc" ".bash_profile" ".login" ".exrc" ".netrc")
-env_sys_home_dir=$HOME
-env_sys_user=$(whoami)
+#!/bin/bash
 
-env_sys_check_file() {
-    env_sys_file_path=$1
-    if [ -f "$env_sys_file_path" ]; then
-        env_sys_owner=$(stat -c '%U' "$env_sys_file_path")
-        env_sys_perms=$(stat -c '%a' "$env_sys_file_path")
-        if [ "$env_sys_owner" == "root" ] || [ "$env_sys_owner" == "$env_sys_user" ]; then
-            if [ "${env_sys_perms: -1}" -le 2 ] && [ "${env_sys_perms: -2:1}" -le 2 ] && [ "${env_sys_perms: -3:1}" -le 6 ]; then
-                echo "$env_sys_file_path: 양호"
-            else
-                echo "$env_sys_file_path: 취약"
-            fi
-        else
-            echo "$env_sys_file_path: 취약"
-        fi
+check_tmout() {
+    local profile_file="/etc/profile"
+    local current_tmout=$(grep -E '^TMOUT=' "$profile_file" | awk -F= '{print $2}')
+    
+    if [ -z "$current_tmout" ]; then
+        echo "TMOUT 값이 설정되어 있지 않습니다. 기본값이 필요합니다."
+        current_tmout=0
+    fi
+
+    if [ "$current_tmout" -le 600 ]; then
+        echo "양호"
     else
-        echo "$env_sys_file_path: 파일이 존재하지 않습니다"
+        echo "취약"
     fi
 }
 
-for env_sys_file in "${env_sys_files[@]}"; do
-    env_sys_check_file "$env_sys_home_dir/$env_sys_file"
-done
+set_tmout() {
+    local profile_file="/etc/profile"
+    
+    if ! grep -q '^TMOUT=' "$profile_file"; then
+        echo "TMOUT=600" >> "$profile_file"
+        echo "export TMOUT" >> "$profile_file"
+        echo "TMOUT 값을 600초로 설정했습니다."
+    else
+        echo "TMOUT 값이 이미 설정되어 있습니다."
+    fi
+}
+
+check_tmout
+# set_tmout

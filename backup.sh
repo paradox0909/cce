@@ -129,6 +129,289 @@ if [ "$1" = "-fix" ]; then
     echo "쉐도우 패스워드 정책을 적용했습니다."
 fi
 
+# 1-5 root 이외의 UID가 '0' 금지
+uid_TEMP_FILE="/tmp/passwd.tmp"
+
+while IFS=: read -r uid_username uid_password uid_uid uid_gid uid_info uid_home uid_shell; do
+    if [[ "$uid_uid" -eq - && "$uid_username" != "root" ]]; then
+        echo "UID가 0인 계정을 찾았습니다."
+        echo "UID가 0인 계정명 :$uid_username"
+        uid_new_uid=1001
+        while grep -q ":$uid_new_uid:" /etc/passwd; do
+        ((uid_new_uid++))
+        done
+        echo "$uid_username 사용자의 UID를 0에서 $uid_new_uid(으)로 변경 중"
+        usermod -u "$uid_new_uid" "$uid_username"
+    fi
+done < /etc/paswd
+grep ':0:' /etc/passwd | grep -v '^root:'
+
+if [[ $? -eq 0 ]]; then
+  echo "Error: Some users still have UID 0 other than root."
+else
+  echo "Success: No u-sers other than root have UID 0."
+fi
+
+#1-6 root 계정 su 제한
+root_su_group_file="/etc/group"
+root_su_su_command="/usr/bin/su"
+root_su_wheel_group="wheel"
+root_su_pam_file="/etc/pam.d/su"
+root_su_aix_security_file="/etc/security/user"
+root_su_hpux_security_file="/etc/default/security"
+
+check_group_exists() {
+    grep -q "^$root_su_wheel_group:" $root_su_group_file
+}
+
+check_su_command_permission() {
+    local permissions
+    permissions=$(ls -l $root_su_su_command | awk '{print $1}')
+    [[ "$permissions" == "-rwsr-x---" ]]
+}
+
+check_pam_wheel_config() {
+    grep -q "auth required .* pam_wheel.so" $root_su_pam_file
+}
+
+check_aix_security_setting() {
+    grep -q "default.*sgroup=staff" $root_su_aix_security_file
+}
+
+check_hpux_security_setting() {
+    grep -q "SU_ROOT_GROUP=wheel" $root_su_hpux_security_file
+}
+##start
+echo "그룹 존재 여부 확인 중..."
+if check_group_exists; then
+    echo "그룹 $root_su_wheel_group 이(가) 존재합니다."
+else
+    echo "그룹 $root_su_wheel_group 이(가) 존재하지 않습니다."
+fi
+
+echo "su 명령어 권한 확인 중..."
+if check_su_command_permission; then
+    echo "$root_su_su_command 의 권한이 올바르게 설정되어 있습니다."
+else
+    echo "$root_su_su_command 의 권한이 올바르게 설정되지 않았습니다."
+fi
+
+echo "PAM wheel 구성 확인 중..."
+if check_pam_wheel_config; then
+    echo "PAM wheel 구성이 올바르게 설정되어 있습니다."
+else
+    echo "PAM wheel 구성이 설정되어 있지 않습니다."
+fi
+
+echo "AIX 보안 설정 확인 중..."
+if check_aix_security_setting; then
+    echo "AIX 보안 설정이 올바르게 설정되어 있습니다."
+else
+    echo "AIX 보안 설정이 설정되어 있지 않습니다."
+fi
+
+echo "HP-UX 보안 설정 확인 중..."
+if check_hpux_security_setting; then
+    echo "HP-UX 보안 설정이 올바르게 설정되어 있습니다."
+else
+    echo "HP-UX 보안 설정이 설정되어 있지 않습니다."
+fi
+
+# 1-7 패스워드 최소 길이 설정
+MAX_PASSLENGTH=$(grep '^PASSLENGTH=' /etc/default/passwd | cut -d '=' -f 2)
+if [ "$MAX_PASSLENGTH" -ge 8 ]; then
+  echo "양호"
+else
+  echo "취약"
+fi
+
+# 1-8, 1-9 패스워드 최대 사용기간 설정 및 패스워드 최소 사용기간 설정
+
+LOGIN_DEFS_FILE="/etc/login.defs"
+
+current_max_days=$(grep "^PASS_MAX_DAYS" $LOGIN_DEFS_FILE | awk '{print $2}')
+
+current_min_days=$(grep "^PASS_MIN_DAYS" $LOGIN_DEFS_FILE | awk '{print $2}')
+
+if [ "$current_max_days" -le 90 ]; then
+    echo "PASS_MAX_DAYS 설정: 양호"
+else
+    echo "PASS_MAX_DAYS 설정: 취약"
+    sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/' $LOGIN_DEFS_FILE
+    echo "PASS_MAX_DAYS 값을 90으로 변경했습니다."
+fi
+
+if [ "$current_min_days" -eq 100 ]; then
+    echo "PASS_MIN_DAYS 설정: 양호"
+else
+    echo "PASS_MIN_DAYS 설정: 취약"
+    sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS 100/' $LOGIN_DEFS_FILE
+    echo "PASS_MIN_DAYS 값을 100으로 변경했습니다."
+fi
+
+# 1-10 불필요한 계정 제거
+UNWANTED_ACCOUNTS=("lp" "uucp" "nuucp")
+
+UNWANTED_FOUND=false
+
+for ACCOUNT in "${UNWANTED_ACCOUNTS[@]}"; do
+  if grep -q "^${ACCOUNT}:" /etc/passwd; then
+    UNWANTED_FOUND=true
+    echo "Deleting account: $ACCOUNT"
+    sudo userdel $ACCOUNT
+  fi
+done
+
+if [ "$UNWANTED_FOUND" = false ]; then
+  echo "양호"
+else
+  echo "취약"
+fi
+
+#1-11 관리자 그룹에 최소한의 계정 포함
+cp /etc/group /etc/group.bak
+
+ROOT_GROUP_LINE=$(grep '^root:' /etc/group)
+ROOT_USERS=$(echo $ROOT_GROUP_LINE | cut -d':' -f4)
+
+NECESSARY_USERS="root"
+
+VULNERABLE="no"
+for USER in $(echo $ROOT_USERS | tr ',' ' '); do
+    if [[ $USER != "root" ]]; then
+        VULNERABLE="yes"
+        break
+    fi
+done
+
+if [[ $VULNERABLE == "yes" ]]; then
+    echo "취약"
+    NEW_ROOT_USERS=$(echo $ROOT_USERS | tr ',' '\n' | grep -v -w -F -e $NECESSARY_USERS | tr '\n' ',' | sed 's/,$//')
+    sed -i "/^root:/ s/:$ROOT_USERS/:$NECESSARY_USERS/" /etc/group
+else
+    echo "양호"
+fi
+
+# 1-12 계정이 존재하지 않는 GID 금지
+TMP_GROUPS=$(mktemp)
+TMP_USERS=$(mktemp)
+
+cat /etc/group | cut -d: -f1,3 | awk -F: '{print $1 " " $2}' > "$TMP_GROUPS"
+
+cat /etc/passwd | cut -d: -f1,3 | awk -F: '{print $2}' > "$TMP_USERS"
+
+status="양호"
+
+while IFS=" " read -r group gid; do
+    if ! grep -q "^$gid$" "$TMP_USERS"; then
+        echo "GID $gid가 사용자 목록에 존재하지 않음: $group"
+        
+        groupdel "$group" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "그룹 삭제 성공: $group"
+        else
+            echo "그룹 삭제 실패: $group"
+            status="취약"
+        fi
+        
+        status="취약"
+    fi
+done < "$TMP_GROUPS"
+
+rm -f "$TMP_GROUPS" "$TMP_USERS"
+
+# 1-13 동일한 UID 금지
+TMP_UIDS=$(mktemp)
+TMP_DUPLICATES=$(mktemp)
+
+cat /etc/passwd | cut -d: -f3 | sort | uniq -d > "$TMP_DUPLICATES"
+
+if [ ! -s "$TMP_DUPLICATES" ]; then
+    echo "양호"
+    rm -f "$TMP_UIDS" "$TMP_DUPLICATES"
+    exit 0
+fi
+
+status="취약"
+
+while read -r uid; do
+    echo "중복 UID 발견: $uid"
+
+    while read -r user _ uid2 _; do
+        if [ "$uid" = "$uid2" ]; then
+            echo "UID $uid을 가진 사용자: $user"
+
+            new_uid=$(awk -F: -v uid="$uid" '$3 >= uid { print $3 }' /etc/passwd | sort -n | tail -1)
+            new_uid=$((new_uid + 1))
+
+            echo "사용자 $user의 UID를 $uid에서 $new_uid로 변경합니다."
+
+            usermod -u "$new_uid" "$user"
+
+            find / -user "$uid" -exec chown -h "$user":"$user" {} \;
+
+            groupmod -g "$new_uid" "$user" 2>/dev/null
+
+            echo "UID 변경 완료: $user"
+        fi
+    done < /etc/passwd
+
+done < "$TMP_DUPLICATES"
+
+rm -f "$TMP_UIDS" "$TMP_DUPLICATES"
+
+echo "$status"
+
+# 1-14 사용자 shell 점검
+#!/bin/bash
+
+check_and_update_shells() {
+    while IFS=: read -r username password uid gid full_name home_dir shell; do
+        if [[ "$shell" != "/bin/false" && "$shell" != "/sbin/nologin" ]]; then
+            if [[ "$uid" -ge 100 && "$uid" -lt 1000 ]]; then
+                echo "$username 계정의 로그인 쉘이 올바르지 않습니다. 수정이 필요합니다."
+                sudo usermod -s /sbin/nologin "$username"
+                echo "$username 계정의 로그인 쉘을 /sbin/nologin으로 변경하였습니다."
+            fi
+        else
+            echo "$username 계정의 로그인 쉘이 올바릅니다."
+        fi
+    done < /etc/passwd
+}
+
+check_and_update_shells
+
+#1-15 Session Timeout 설정
+check_tmout() {
+    local profile_file="/etc/profile"
+    local current_tmout=$(grep -E '^TMOUT=' "$profile_file" | awk -F= '{print $2}')
+    
+    if [ -z "$current_tmout" ]; then
+        echo "TMOUT 값이 설정되어 있지 않습니다. 기본값이 필요합니다."
+        current_tmout=0
+    fi
+
+    if [ "$current_tmout" -le 600 ]; then
+        echo "양호"
+    else
+        echo "취약"
+    fi
+}
+
+set_tmout() {
+    local profile_file="/etc/profile"
+    
+    if ! grep -q '^TMOUT=' "$profile_file"; then
+        echo "TMOUT=600" >> "$profile_file"
+        echo "export TMOUT" >> "$profile_file"
+        echo "TMOUT 값을 600초로 설정했습니다."
+    else
+        echo "TMOUT 값이 이미 설정되어 있습니다."
+    fi
+}
+
+check_tmout
+
 #2-1 root 홈 패스 디렉터리 권한 및 패스 설정
 root_home_path_authority=$(which ls)
 
