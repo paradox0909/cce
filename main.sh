@@ -1709,7 +1709,7 @@ fi
 
 # u-70 expn, vrfy 명령어 제한
 #!/bin/bash
-###############
+################
 if [ ! -f /etc/mail/sendmail.cf ]; then
     echo "sendmail.cf 파일을 찾을 수 없습니다. 취약 상태로 간주합니다."
 fi
