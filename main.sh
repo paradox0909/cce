@@ -933,6 +933,62 @@ else
     echo "파일 $host_lpd_FILE 이(가) 존재하지 않습니다. 작업을 종료합니다."
 fi
 
+# u-56 umask 설정 관리
+#!/bin/bash
+
+update_umask() {
+    local file=$1
+    local umask_value="022"
+
+    if grep -q "umask" "$file"; then
+        sed -i "s/^umask .*/umask $umask_value/" "$file"
+    else
+        echo "umask $umask_value" >> "$file"
+    fi
+
+    if grep -q "export umask" "$file"; then
+        sed -i "s/^export umask.*/export umask/" "$file"
+    else
+        echo "export umask" >> "$file"
+    fi
+}
+
+files=("/etc/profile" "/etc/default/login")
+
+for file in "${files[@]}"; do
+    if [[ -f $file ]]; then
+        echo "$file 에서 UMASK 값을 업데이트하는 중"
+        update_umask "$file"
+    else
+        echo "파일 $file 이(가) 존재하지 않습니다. 건너뜁니다."
+    fi
+done
+
+echo "UMASK 값 업데이트 완료."
+
+# u-57 홈디렉토리 소유자 및 권한 설정
+
+cat /etc/passwd | while IFS=: read -r username _ _ _ _ homedir _; do
+    if id "$username" &>/dev/null && [ "$homedir" != "/" ]; then
+        if [ -d "$homedir" ]; then
+            dir_info=$(ls -ald "$homedir")
+            dir_owner=$(echo "$dir_info" | awk '{print $3}')
+            dir_perms=$(echo "$dir_info" | awk '{print $1}')
+
+            if [ "$dir_owner" == "$username" ]; then
+                if [[ "$dir_perms" =~ ^.{8}w ]]; then
+                    echo "취약: 사용자 $username 의 홈 디렉터리 $homedir 타 사용자 쓰기 권한 부여됨"
+                else
+                    echo "양호: 사용자 $username 의 홈 디렉터리 $homedir"
+                fi
+            else
+                echo "취약: 사용자 $username 의 홈 디렉터리 $homedir 소유자가 다름"
+            fi
+        else
+            echo "취약: 사용자 $username 의 홈 디렉터리 $homedir 존재하지 않음"
+        fi
+    fi
+done
 
 # 3.1 Finger Service disable 
 FINGER_INETD_CONF="/etc/inetd.conf"
