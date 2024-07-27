@@ -856,8 +856,55 @@ else
     echo "수동 진단 필요"
 fi
 
-#connection ip and port limit
+# u-18 (2-14) connection ip and port limit 접속 IP 및 포트 제한
+check_tcp_wrapper() {
+    if [ -f /etc/hosts.allow ] || [ -f /etc/hosts.deny ]; then
+        echo "TCP Wrapper 확인 중..."
+        if grep -q "ALL: ALL" /etc/hosts.deny && grep -q "sshd: ALL" /etc/hosts.allow; then
+            echo "TCP Wrapper: 양호"
+        else
+            echo "TCP Wrapper: 취약"
+        fi
+    else
+        echo "TCP Wrapper: 미사용"
+    fi
+}
 
+check_ipfilter() {
+    if command -v ipf >/dev/null 2>&1; then
+        echo "IPFilter 확인 중..."
+        ipfstat -io | grep -q "pass in from" && ipfstat -io | grep -q "pass out to"
+        if [ $? -eq 0 ]; then
+            echo "IPFilter: 양호"
+        else
+            echo "IPFilter: 취약"
+        fi
+    else
+        echo "IPFilter: 미사용"
+    fi
+}
+
+check_iptables() {
+    if command -v iptables >/dev/null 2>&1; then
+        echo "IPtables 확인 중..."
+        iptables -L | grep -q "ACCEPT" && iptables -L | grep -q "REJECT"
+        if [ $? -eq 0 ]; then
+            echo "IPtables: 양호"
+        else
+            echo "IPtables: 취약"
+        fi
+    else
+        echo "IPtables: 미사용"
+    fi
+}
+
+check_ip_port_main() {
+    check_tcp_wrapper
+    check_ipfilter
+    check_iptables
+}
+
+check_ip_port_main
 
 # 3.1 Finger Service disable 
 FINGER_INETD_CONF="/etc/inetd.conf"
