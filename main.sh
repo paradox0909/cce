@@ -990,6 +990,27 @@ cat /etc/passwd | while IFS=: read -r username _ _ _ _ homedir _; do
     fi
 done
 
+# u-58 홈디렉토리로 지정한 디렉토리의 존재 관리
+#!/bin/bash
+
+home_dir_passwd_file="/etc/passwd"
+home_dir_missing_home_count=0
+
+while IFS=: read -r home_dir_username _ _ _ _ home_dir_home_dir _; do
+  if [ ! -d "$home_dir_home_dir" ]; then
+    echo "사용자 $home_dir_username의 홈 디렉터리가 없습니다: $home_dir_home_dir"
+    home_dir_missing_home_count=$((home_dir_missing_home_count + 1))
+  fi
+done < "$home_dir_passwd_file"
+
+if [ $home_dir_missing_home_count -eq 0 ]; then
+  echo "양호"
+else
+  echo "취약"
+fi
+
+#
+
 # 3.1 Finger Service disable 
 FINGER_INETD_CONF="/etc/inetd.conf"
 
