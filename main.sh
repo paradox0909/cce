@@ -906,6 +906,34 @@ check_ip_port_main() {
 
 check_ip_port_main
 
+# u-55 hosts.lpd 파일 소유자 및 권한 설정
+
+host_lpd_FILE="/etc/hosts.lpd"
+
+if [ -f "$host_lpd_FILE" ]; then
+    echo "파일 $host_lpd_FILE 이(가) 존재합니다."
+
+    host_lpd_PERMISSIONS=$(stat -c "%a" "$host_lpd_FILE")
+    if [ "$host_lpd_PERMISSIONS" != "600" ]; then
+        echo "$host_lpd_FILE 의 권한을 600으로 변경합니다."
+        chmod 600 "$host_lpd_FILE"
+    else
+        echo "$host_lpd_FILE 의 권한이 이미 600으로 설정되어 있습니다."
+    fi
+
+    host_lpd_OWNER=$(stat -c "%U" "$host_lpd_FILE")
+    if [ "$host_lpd_OWNER" != "root" ]; then
+        echo "$host_lpd_FILE 의 소유자를 root로 변경합니다."
+        chown root "$host_lpd_FILE"
+    else
+        echo "$host_lpd_FILE 의 소유자가 이미 root로 설정되어 있습니다."
+    fi
+
+else
+    echo "파일 $host_lpd_FILE 이(가) 존재하지 않습니다. 작업을 종료합니다."
+fi
+
+
 # 3.1 Finger Service disable 
 FINGER_INETD_CONF="/etc/inetd.conf"
 
