@@ -991,8 +991,6 @@ cat /etc/passwd | while IFS=: read -r username _ _ _ _ homedir _; do
 done
 
 # u-58 홈디렉토리로 지정한 디렉토리의 존재 관리
-#!/bin/bash
-
 home_dir_passwd_file="/etc/passwd"
 home_dir_missing_home_count=0
 
@@ -1009,7 +1007,58 @@ else
   echo "취약"
 fi
 
-#
+# u-59 숨겨진 파일 및 디렉토리 검색 및 제거
+hidden_DIRECTORY="/home/user"
+
+UNWANTED_FILES=(".*.bak" ".*.tmp" ".*.swp" ".*.DS_Store")
+UNWANTED_DIRS=(".*Trash" ".*TemporaryItems")
+
+function check_args() {
+    if [ "$1" != "-fix" ]; then
+        echo "사용법: $0 -fix"
+        echo "인자 '-fix'를 제공해야 합니다."
+        exit 1
+    fi
+}
+
+if [ "$#" -ne 1 ]; then
+    echo "사용법: $0 -fix"
+    exit 1
+fi
+
+check_args "$1"
+
+hidden_files=$(find "$hidden_DIRECTORY" -type f -name ".*")
+hidden_dirs=$(find "$hidden_DIRECTORY" -type d -name ".*")
+
+all_hidden_files=$(find / -type f -name ".*" 2>/dev/null)
+all_hidden_dirs=$(find / -type d -name ".*" 2>/dev/null)
+
+remove_unwanted() {
+    local items=("$@")
+    local removed=false
+    for item in "${items[@]}"; do
+        if [[ $item =~ ${UNWANTED_FILES[@]} ]] || [[ $item =~ ${UNWANTED_DIRS[@]} ]]; then
+            echo "삭제: $item"
+            rm -rf "$item"
+            removed=true
+        fi
+    done
+    echo $removed
+}
+
+removed_files=$(remove_unwanted "${hidden_files[@]}")
+removed_dirs=$(remove_unwanted "${hidden_dirs[@]}")
+
+removed_all_files=$(remove_unwanted "${all_hidden_files[@]}")
+removed_all_dirs=$(remove_unwanted "${all_hidden_dirs[@]}")
+
+if $removed_files || $removed_dirs || $removed_all_files || $removed_all_dirs; then
+    echo "양호"
+else
+    echo "취약"
+fi
+
 
 # 3.1 Finger Service disable 
 FINGER_INETD_CONF="/etc/inetd.conf"
