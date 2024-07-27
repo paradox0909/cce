@@ -856,6 +856,9 @@ else
     echo "수동 진단 필요"
 fi
 
+#connection ip and port limit
+
+
 # 3.1 Finger Service disable 
 FINGER_INETD_CONF="/etc/inetd.conf"
 
