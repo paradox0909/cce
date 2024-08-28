@@ -31,5 +31,5 @@ Step 4. execute
 ##### warning : --fix 인자 사용 시, 서버 내 파일의 내용이 임의로 삭제되거나 바뀔 수 있으므로, 백업을 하고 사용할 것.
 
 * * *
-##### demo
+##### demo video << connect to youtube...
 [![Watch the video](https://img.youtube.com/vi/scJEYiFjDYI/0.jpg)](https://youtu.be/scJEYiFjDYI)
