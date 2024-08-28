@@ -18,7 +18,7 @@ Step 4. execute
 ```
 
 * * *
-### How to Fix the server
+###### How to Fix the server
 사용법 : 
 --fix 인자를 사용해주세요.
 
@@ -28,4 +28,8 @@ Step 4. execute
 </code>
 </pre>
 
-### warning : --fix 인자 사용 시, 서버 내 파일의 내용이 임의로 삭제되거나 바뀔 수 있으므로, 백업을 하고 사용할 것.
+##### warning : --fix 인자 사용 시, 서버 내 파일의 내용이 임의로 삭제되거나 바뀔 수 있으므로, 백업을 하고 사용할 것.
+
+* * *
+##### demo
+<iframe width="560" height="315" src="https://youtu.be/scJEYiFjDYI" frameborder="0" allowfullscreen></iframe>
