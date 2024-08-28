@@ -212,7 +212,7 @@ fi
 
 # u-08 /etc/shadow 파일 소유자 및 권한 설정
 
-shadow_owner=$1(ls -l /etc/shadow | awk '{print $3}')
+shadow_owner=$(ls -l /etc/shadow | awk '{print $3}')
 shadow_permissions=$(stat -c %a /etc/shadow)
 
 if [ "$shadow_owner" = "root" && [ "$shadow_permissions" = -le 400 ]]; then
