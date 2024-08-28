@@ -32,4 +32,4 @@ Step 4. execute
 
 * * *
 ##### demo
-<iframe width="560" height="315" src="https://www.youtube.com/embed/scJEYiFjDYI" frameborder="0" allowfullscreen></iframe>
+[![Watch the video](https://img.youtube.com/vi/scJEYiFjDYI/0.jpg)](https://youtu.be/scJEYiFjDYI)
